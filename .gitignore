@@ -1,0 +1,52 @@
+# NOTE: this is just a file. No git repository has been initialized yet (deferred).
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Viveka results store -- local run data, regenerable. Committed results live in results/.
+data/viveka.db
+data/viveka.db-wal
+data/viveka.db-shm
+
+# Deliberately NOT ignored (load-bearing, must be committed):
+#   data/golden_set.jsonl       frozen eval set
+#   data/golden_set.meta.json   hash + provenance, anti-tamper for the CI gate
+#   data/demo.db                seeded read-only DB for the hosted demo
+#   results/baseline.json       the CI gate's reference point
+#   results/latest.json         evidence produced by a local benchmark run
+
+# HF datasets cache, if it ever lands in-tree
+.cache/
+
+# Dashboard
+dashboard/node_modules/
+dashboard/dist/
+
+# OS / editor
+.DS_Store
+.idea/
+*.swp
+
+# Claude Code local settings (personal tool permissions, not shared)
+.claude/
+
+# Generated output of `make validate-judge` (recomputed live by the dashboard)
+results/judge_validation.json
+
+# Design notes kept locally, not published
+docs/
