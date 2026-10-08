@@ -1,0 +1,94 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "viveka"
+dynamic = ["version"]                       # single-sourced from viveka.__version__
+description = "An LLM evaluation harness with LLM-as-judge scoring, SRE-style latency metrics (P50/P95, TTFT), and CI regression gating."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Harsha Vardhan Reddy Kallem" }]
+license = { text = "MIT" }
+keywords = ["llm", "evaluation", "eval-harness", "llm-as-judge", "benchmarking", "ollama"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+
+# Base tier: `viveka run` must work out of the box. See docs/MILESTONE_0_DESIGN.md §4.1.
+# Deliberately excludes fastapi (extra: api) and datasets (extra: data) so that
+# `viveka.core` stays lightweight and importable by downstream projects (constraint C1).
+dependencies = [
+    "httpx>=0.27",
+    "pydantic>=2.7",
+    "pyyaml>=6.0",
+    "typer>=0.12",
+    "rich>=13.7",
+]
+
+[project.optional-dependencies]
+# Serving results. Never imported by viveka.core -- enforced by tests/test_import_boundary.py
+api = ["fastapi>=0.111", "uvicorn>=0.30"]
+# Dev-time only: rebuilding the golden set. Pulls pyarrow/pandas (hundreds of MB).
+# Consumers never need this -- the golden set ships as committed JSONL.
+data = ["datasets>=2.19"]
+# Upper bounds on the linters are deliberate. ruff and mypy add rules and tighten defaults in
+# every minor release, so an unbounded range means CI eventually turns red on an untouched repo.
+dev = [
+    "pytest>=8.0,<10",
+    "pytest-cov>=5.0",
+    "ruff>=0.5,<1",
+    "mypy>=1.10,<3",
+    "types-PyYAML>=6.0",
+    "pre-commit>=3.7",
+]
+
+[project.urls]
+Homepage = "https://github.com/harshakallem22/viveka"
+Repository = "https://github.com/harshakallem22/viveka"
+
+[project.scripts]
+viveka = "viveka.cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "viveka.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+viveka = ["py.typed"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RET", "PTH"]
+ignore = ["E501"]  # line length handled by the formatter
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "ollama: requires a live Ollama server (deselect in CI with -m 'not ollama')",
+]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["src/viveka"]
+strict = true
+warn_unreachable = true
+# The API/dashboard layers are thin glue; strictness is aimed at core.
+[[tool.mypy.overrides]]
+module = "viveka.api.*"
+strict = false
