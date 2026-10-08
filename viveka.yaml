@@ -1,0 +1,51 @@
+# Viveka run configuration.
+# Adding a contestant is a one-line change (design constraint C5).
+
+run:
+  golden_set: data/golden_set.jsonl
+  db: data/viveka.db
+  repeats: 1              # 3 for the headline benchmark -- stabilizes P95 (design §6.4)
+  warmup: true            # do not disable: a cold call is 6.8x slower and would become the P95
+  resume: true            # skip work already recorded for the same run_id
+  concurrency: 1          # sequential; 16GB cannot host two 8B models (C4)
+  keep_alive: "10m"       # keep weights resident across a model's items
+  timeout_s: 120
+  base_url: "http://localhost:11434"
+  defaults:
+    temperature: 0        # near-determinism keeps CI gate noise below the statistical floor
+    seed: 7
+    # Raised 512 -> 1024 after a smoke run truncated 1 of 2 gemma3:4b responses mid-sentence
+    # (no "####" marker survived). A truncated answer is a corrupted measurement, not a wrong
+    # model. Watch the `trunc` column in `viveka show`; if it is non-zero, raise this again.
+    num_predict: 1024
+
+contestants:
+  - model: "llama3.1:8b"
+  - model: "mistral:latest"
+  - model: "gemma3:4b"
+
+judge:
+  model: "qwen3:8b"       # deliberately NOT a contestant, to avoid self-preference bias
+  think: false            # suppress qwen3's <think> block: faster, predictable cost (§1.3)
+  temperature: 0
+  seed: 7
+  num_predict: 400
+  prompt_version: "v1"
+
+gates:
+  # Two kinds of check, doing two different jobs:
+  #
+  #   * Absolute floors catch CATASTROPHE -- a broken prompt, a model returning garbage.
+  #   * Baseline deltas and item counts catch REGRESSION.
+  #
+  # So the floor belongs well below current performance. Measured: the weakest contestant
+  # (mistral) sits at 52% with a 95% CI of [39%, 65%]. A floor of 0.55 failed it outright and a
+  # floor anywhere inside that interval would fire on sampling noise rather than on a real
+  # problem -- and a permanently-red gate is one everybody learns to ignore. 0.40 sits below the
+  # CI's lower bound, so only genuine breakage trips it.
+  min_accuracy: 0.40
+  max_p95_latency_ms: 45000
+  # One item is 2% at n=50, so 10% is ~5 items -- above single-item noise.
+  max_accuracy_drop: 0.10
+  max_regressed_items: 3  # item-level: more sensitive and more actionable than an aggregate (§11.3)
+  require_same_golden_set: true
