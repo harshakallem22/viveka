@@ -1,0 +1,129 @@
+# Tier 1: runs on every push/PR. No GPU, no models, no network calls to Ollama.
+#
+# The whole eval pipeline still executes end to end -- run, judge, report, gate -- against
+# ReplayProvider serving *recorded real model output* from tests/fixtures/cassettes/. Only the
+# network call is substituted, so orchestration, metrics, extraction and gate logic are genuinely
+# covered on every commit. Target: under 90 seconds.
+#
+# Why not run the real models here: a free runner has no GPU, ~14GB of disk, and CPU-only 8B
+# inference takes minutes per item. See .github/workflows/gate.yml for how the real numbers get in.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install (dev + api)
+        # The `api` extra IS installed here, for two reasons:
+        #   1. mypy checks all of src/viveka, including the FastAPI layer -- type-checking code
+        #      whose dependencies are absent is incoherent and just reports import-not-found.
+        #   2. It makes the import-boundary test MEANINGFUL. Proving `viveka.core` does not pull
+        #      in fastapi is only a real guarantee when fastapi is importable; with it uninstalled
+        #      the assertion passes trivially and tests nothing.
+        # The genuine "core installs and runs standalone" guarantee lives in the `minimal` job.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,api]"
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Type-check
+        run: mypy
+
+      - name: Verify the committed eval set has not drifted
+        # The CI gate is only meaningful if the eval set is provably unchanged; this fails loudly
+        # if golden_set.jsonl was edited without rebuilding its hash sidecar.
+        run: |
+          python -c "
+          from viveka.core.datasets import load_golden_set
+          items = load_golden_set('data/golden_set.jsonl')
+          print(f'golden set OK: {len(items)} items, hash verified')
+          "
+
+      - name: Tests
+        run: pytest -m "not ollama" -q --cov=viveka --cov-report=term-missing
+
+      - name: Confirm core does not pull in the extras it could
+        # Meaningful precisely because fastapi IS installed in this job.
+        run: |
+          python -c "
+          import sys, viveka.core
+          leaked = {'fastapi','uvicorn','datasets','pyarrow','pandas'} & set(sys.modules)
+          assert not leaked, f'viveka.core pulled in extras: {leaked}'
+          print('core import boundary OK (with extras present)')
+          "
+
+  minimal:
+    # The constraint C1 guarantee: `pip install viveka` with NO extras must give a working core
+    # library. Separate job because the matrix above deliberately installs the extras.
+    name: minimal install (no extras)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install base only
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+      - name: Core must import and work with nothing optional installed
+        # Runs outside the repo root so it exercises the installed package, not the source tree.
+        run: |
+          cd "$RUNNER_TEMP"
+          python -c "
+          import importlib.util, sys
+          for mod in ('fastapi', 'uvicorn', 'datasets'):
+              assert importlib.util.find_spec(mod) is None, f'{mod} unexpectedly installed'
+          from viveka.core import percentile, wilson_interval, Timing
+          from viveka.core.graders import NumericExactMatch
+          from viveka.core.agreement import compare_verdicts
+          from viveka.core.gate import evaluate_gate, GateThresholds
+          assert percentile([1.0, 2.0, 3.0, 4.0], 95) == 4.0
+          assert round(wilson_interval(46, 50)[0], 3) == 0.812
+          t = Timing.from_ollama({'eval_count': 27, 'eval_duration': 900000000}, total_ms=1200, ttft_ms=200)
+          assert round(t.decode_tps, 1) == 30.0
+          print('core works standalone with zero optional dependencies')
+          "
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build distributions
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+          twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
