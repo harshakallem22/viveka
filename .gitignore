@@ -50,3 +50,6 @@ results/judge_validation.json
 
 # Design notes kept locally, not published
 docs/
+
+# Portfolio writeup, published on my site rather than here
+blog.md
