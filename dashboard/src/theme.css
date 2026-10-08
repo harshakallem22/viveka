@@ -1,0 +1,199 @@
+/* Palette: the validated reference instance.
+   Categorical slots 1-3 (blue / orange / aqua) -- exactly three contestants, and the first three
+   slots are the ones that clear the all-pairs CVD and normal-vision floors in both modes.
+   Validated with scripts/validate_palette.js --pairs all: light worst CVD dE 9.2, normal 24.0;
+   dark worst CVD dE 9.4, normal 20.9.
+
+   Light-mode aqua sits at 2.74:1 against the surface (below 3:1), so the relief rule applies:
+   every chart ships visible direct labels AND a table view. Both are implemented. */
+
+/* All slots are declared on :root ONLY, never additionally on an inner wrapper.
+   Splitting them caused a real bug: `body` sets `color: var(--text-primary)`, which resolved the
+   dark-mode value, and inherited `color` does not get recomputed when a descendant re-declares the
+   variable -- so headings and table text inherited white and vanished against light cards. One
+   scope per mode keeps the computed values consistent all the way down. */
+:root {
+  color-scheme: light;
+
+  --surface-1: #fcfcfb;
+  --page: #f9f9f7;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --gridline: #e1e0d9;
+  --baseline: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.1);
+
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-critical: #d03b3b;
+  --success-text: #006300;
+
+  --radius: 10px;
+  --mark-radius: 4px;
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --surface-1: #1a1a19;
+    --page: #0d0d0d;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --gridline: #2c2c2a;
+    --baseline: #383835;
+    --border: rgba(255, 255, 255, 0.1);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --success-text: #0ca30c;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-1: #1a1a19;
+  --page: #0d0d0d;
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted: #898781;
+  --gridline: #2c2c2a;
+  --baseline: #383835;
+  --border: rgba(255, 255, 255, 0.1);
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --success-text: #0ca30c;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app { max-width: 1180px; margin: 0 auto; padding: 28px 24px 72px; }
+
+/* --- header ------------------------------------------------------------------------ */
+.masthead { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.masthead h1 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
+.masthead p { margin: 6px 0 0; color: var(--text-secondary); max-width: 60ch; }
+.provenance { margin-top: 10px; display: flex; gap: 16px; flex-wrap: wrap; color: var(--text-muted); font-size: 12px; }
+.provenance code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+.controls { display: flex; gap: 8px; align-items: center; }
+
+button, select {
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  min-height: 32px;
+}
+button:hover, select:hover { background: var(--page); }
+button[aria-pressed="true"] { border-color: var(--series-1); color: var(--series-1); }
+
+/* One filter row above everything it scopes -- never per-card filters. */
+.filter-row {
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  margin: 22px 0 18px; padding: 12px 14px;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.filter-row label { color: var(--text-secondary); font-size: 13px; }
+
+/* --- cards ------------------------------------------------------------------------- */
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin-bottom: 18px;
+}
+.card > header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 4px; }
+.card h2 { margin: 0; font-size: 15px; }
+.card .note { margin: 2px 0 16px; color: var(--text-muted); font-size: 12px; max-width: 78ch; }
+
+.grid { display: grid; gap: 18px; }
+@media (min-width: 900px) { .grid.two { grid-template-columns: 1fr 1fr; } }
+
+/* --- stat tiles: the number IS the chart, so no plot ------------------------------- */
+.tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); margin-bottom: 18px; }
+.tile {
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px;
+}
+.tile .label { color: var(--text-secondary); font-size: 12px; }
+/* Proportional figures: tabular-nums makes large standalone numbers look loose. */
+.tile .value { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; margin-top: 2px; }
+.tile .sub { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+.tile .value.good { color: var(--success-text); }
+
+/* --- legend: always present for >= 2 series --------------------------------------- */
+.legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+.legend-item { display: inline-flex; align-items: center; gap: 7px; color: var(--text-secondary); font-size: 12px; }
+.swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+
+/* --- charts ----------------------------------------------------------------------- */
+.chart { width: 100%; overflow: visible; display: block; }
+.chart text { font-family: var(--font); }
+.axis-label { fill: var(--text-muted); font-size: 11px; }
+.tick-label { fill: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.series-label { fill: var(--text-secondary); font-size: 12px; }
+.value-label { fill: var(--text-primary); font-size: 12px; font-weight: 600; }
+.gridline { stroke: var(--gridline); stroke-width: 1; }   /* solid hairline, never dashed */
+.baseline { stroke: var(--baseline); stroke-width: 1; }
+.hit { fill: transparent; cursor: default; }
+
+/* --- tooltip ---------------------------------------------------------------------- */
+.tooltip {
+  position: fixed; z-index: 40; pointer-events: none;
+  background: var(--surface-1); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; font-size: 12px; max-width: 320px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
+}
+.tooltip .tt-title { font-weight: 600; margin-bottom: 3px; }
+.tooltip .tt-row { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+
+/* --- tables ----------------------------------------------------------------------- */
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--gridline); vertical-align: top; }
+th { color: var(--text-secondary); font-weight: 600; font-size: 12px; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+tbody tr:hover { background: var(--page); }
+.scroll { max-height: 460px; overflow: auto; }
+
+.pill {
+  display: inline-block; padding: 1px 7px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; border: 1px solid var(--border);
+}
+.pill.correct { color: var(--success-text); }
+.pill.incorrect { color: var(--status-critical); }
+.pill.error { color: var(--text-secondary); }
+
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.muted { color: var(--text-muted); }
+.warnbox {
+  border-left: 3px solid var(--status-warning);
+  padding: 8px 12px; margin: 12px 0 0; color: var(--text-secondary); font-size: 12.5px;
+}
+.reasoning { color: var(--text-secondary); font-size: 12px; max-width: 52ch; }
+
+/* Hold the previous render at reduced opacity on refetch -- never a skeleton flash. */
+.refetching { opacity: 0.55; transition: opacity 120ms ease; }
+.state { padding: 40px 0; color: var(--text-secondary); }
